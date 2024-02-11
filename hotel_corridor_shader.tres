@@ -1,0 +1,191 @@
+[gd_resource type="Shader" format=2]
+
+[resource]
+code = "shader_type canvas_item;
+
+uniform sampler2D iChannel0;
+uniform sampler2D iChannel1;
+uniform sampler2D iChannel2;
+uniform float width_by_height = 1.0;
+
+// https://www.shadertoy.com/view/lXXGzn
+
+const float pi = 3.141592654;
+const float fovAngle = pi / 4.;
+
+
+const vec3 color_wood   = vec3(137., 74.,  47. ) / 255.;
+const vec3 color_carpet = vec3(202., 63.,  63. ) / 255.;
+const vec3 color_wall   = vec3(143., 176., 130.) / 255.;
+const vec3 color_trim   = vec3(245., 189., 163.) / 255.;
+
+const float room_z_ext = 1.25;
+
+
+mat4 rotMat(vec3 axis, float angle)
+{
+    axis = normalize(axis);
+    float s = sin(angle);
+    float c = cos(angle);
+    float oc = 1.0 - c;
+    
+    return mat4(vec4(oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,  0.0),
+                vec4(oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,  0.0),
+                vec4(oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c,           0.0),
+                vec4(0.0,                                0.0,                                0.0,                                1.0));
+}
+
+vec3 rotate(vec3 p, vec3 axis, float angle)
+{
+    return (rotMat(axis, angle) * vec4(p, 0)).xyz;
+}
+
+float sdf_sphere(vec3 p, vec3 c, float r)
+{
+    return length(c - p) - r;
+}
+
+float sdf_plane(vec3 p, vec3 n, float h)
+{
+    return dot(p, n) - h;
+}
+
+float sdf_box(vec3 p, vec3 c, vec3 e)
+{
+    vec3 q = abs(p - c) - e;
+    return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+}
+
+float scene_window(float d, vec3 p)
+{
+    vec3 p_window = vec3(p.x, mod(p.y, 16.), p.z);
+    d = max(d, -sdf_box(p_window, vec3(-1.7, 8., 1.5 - room_z_ext), vec3(0.3, 2.5, .75)));
+    d = min(d, sdf_box(p_window, vec3(-1.4, 8., 0.7 - room_z_ext), vec3(0.1, 2.5, 0.05)));
+    d = min(d, sdf_box(p_window, vec3(-1.8, 8., 1.9 - room_z_ext), vec3(0.05, 2.5, 0.05)));
+    d = min(d, sdf_box(p_window, vec3(-1.8, 8., 1.1 - room_z_ext), vec3(0.05, 2.5, 0.05)));
+    vec3 p_window_vspoke = vec3(p_window.x, 8. + mod(p_window.y, 1.), p_window.z);
+    d = min(d, sdf_box(p_window_vspoke, vec3(-1.8, 8., 1.5 - room_z_ext), vec3(0.05, 0.05, 0.75)));
+    
+    return d;
+}
+
+float scene(vec3 p)
+{
+    float d = 1e12;
+    
+    // Twisting corridor
+    //float twist = 32. - p.y / 32.;
+    //p.x = p.x * cos(twist) - p.z * sin(twist);
+    //p.z = p.z * cos(twist) + p.x * sin(twist);
+
+    d = min(d, -sdf_box(p, vec3(0,0,0), vec3(1.5, 128., room_z_ext)));
+    
+    // Pillars & beams
+    vec3 p_supports = vec3(abs(p.x), mod(p.y, 8.), p.z);
+    d = min(d, sdf_box(p_supports, vec3(1.5, 4., 0), vec3(0.3, 0.3, room_z_ext)));
+    d = min(d, sdf_box(p_supports, vec3(0, 4., room_z_ext), vec3(1.5, 0.3, 0.3)));
+    
+    // Door
+    vec3 p_door = vec3(p.x, mod(p.y, 16.), p.z);
+    d = max(d, -sdf_box(p_door, vec3(2., 0.66, 1.1 - room_z_ext), vec3(0.75, 0.66, 1.1)));
+
+    d = scene_window(d, p);
+    
+    
+    return d;
+}
+
+vec3 calcNormal(in vec3 p)
+{
+    const float eps = 0.001;
+    const vec2 h = vec2(eps,0);
+    return normalize(
+        vec3(
+            scene(p+h.xyy) - scene(p-h.xyy),
+            scene(p+h.yxy) - scene(p-h.yxy),
+            scene(p+h.yyx) - scene(p-h.yyx)
+        )
+    );
+}
+
+bool march(in vec3 rayOrig, in vec3 rayDir, in int stepsMax, in float stepLengthMax, out float dist)
+{
+    for (int i = 0; i < stepsMax; ++i)
+    {
+        vec3 p = vec3(rayOrig + rayDir * dist);
+        float d = scene(p);
+
+        if (d < 0.002)
+            return true;
+
+        dist += min(stepLengthMax, d);
+    }
+    
+    return false;
+}
+
+vec3 color(in vec3 p, in float depth)
+{
+    vec3 cout = vec3(1, 0, 1);
+    
+    if (p.z < -room_z_ext + 0.01) { // Floor
+        if (abs(p.x) < 0.75) {
+            cout = color_carpet + texture(iChannel0, p.xy * vec2(1, 1.)).x;
+            //cout *= mod(floor(abs(sin(p.y) * tan(p.x * 1.9 - 1.5)) * 4.), 4.) / 4.;
+            cout += mod(floor(sin(p.x * 4.) * cos(p.y * 2.) * 5.), 5.) / 16.;
+        } else {
+            vec2 plank_p = vec2(floor(p.x * 4.), floor((p.y + mod(floor(p.x * 4.), 2.)) / 3.));
+            vec2 sample_p = plank_p / 128.;
+            cout = color_wood + texture(iChannel0, sample_p).x * 0.25;
+        }
+    } else if (p.x < -1.9) {
+        cout = vec3(0);
+    //} else if (sdf_box(p, vec3(p.x, mod(p.y, 4.) - 8., p.z), vec3(2., 2., 2.)) < 0.) {
+    //    cout = vec3(1.);
+    } else { // Walls & ceiling
+        cout = color_wall;
+    }
+    
+    return cout;
+}
+
+void mainImage( out vec4 fragColor, in vec2 uv )
+{
+	uv.x = uv.x * width_by_height - (width_by_height - 1.0) * 0.5;
+    float walk_dist = mod(-TIME * 8., 128.);
+    vec3 rayOrig = vec3(sin(walk_dist) * 0.05, walk_dist, 1.6 + abs(sin(walk_dist)) * 0.1 - room_z_ext);
+    
+    vec3 rayDir = rotate(
+        rotate(
+            vec3(0,0,1),
+            vec3(0,1,0),
+            -(uv.x - .5) * fovAngle
+        ),
+        vec3(1,0,0),
+        (uv.y - .5) * fovAngle - pi/1.8
+    );
+    
+    float hitDist = 0.01;
+    bool hit = march(rayOrig, rayDir, 256, .5, hitDist);
+    vec3 hitPos = rayOrig + rayDir * hitDist;
+    vec3 normal = calcNormal(hitPos);
+    
+    vec3 color = color(hitPos, hitDist);
+    vec3 lit = color * (
+        // Flashlight
+        (dot(rayDir, normalize(vec3(sin(TIME * 12.) * 0.05, -1, -0.24 - cos(TIME * 16.) * 0.05))) - 0.66) * 24. / (hitDist)
+    );
+    
+    lit *= vec3(-dot(normal, rayDir));
+   
+    // Output to screen
+    //fragColor = vec4(rayDir, 1);
+    //fragColor = vec4(normal, 1.);
+    fragColor = vec4(lit, 1.);
+}
+
+void fragment()
+{
+	vec2 flipped_uvs = vec2(UV.x, 1.0 - UV.y);
+	mainImage(COLOR, flipped_uvs);
+}"

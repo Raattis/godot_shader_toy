@@ -1,0 +1,13 @@
+[gd_resource type="ShaderMaterial" load_steps=4 format=2]
+
+[ext_resource path="res://hotel_corridor_shader.tres" type="Shader" id=1]
+[ext_resource path="res://icon.png" type="Texture" id=2]
+
+[sub_resource type="NoiseTexture" id=3]
+
+[resource]
+shader = ExtResource( 1 )
+shader_param/width_by_height = 1.66
+shader_param/iChannel0 = SubResource( 3 )
+shader_param/iChannel1 = ExtResource( 2 )
+shader_param/iChannel2 = ExtResource( 2 )
