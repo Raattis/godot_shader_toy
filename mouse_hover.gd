@@ -43,8 +43,9 @@ func _process(delta:float ):
 	#sy_i = int(sy)
 	#ox_i = int(ox)
 	#oy_i = int(oy)
-	if focused:
+	if focused && sleep_delay > 0:
 		update() #queue_redraw()
+	sleep_delay -= delta
 	
 var focused := true
 func _notification(what: int) -> void:
@@ -54,14 +55,17 @@ func _notification(what: int) -> void:
 		NOTIFICATION_WM_FOCUS_IN:
 			focused = true
 
+var sleep_delay := 0.0
 func _input(event):
 	if event is InputEventMouseMotion:
+		sleep_delay = 2.0
 		if event.button_mask != 0:
 			target -= event.relative / get_viewport_rect().size * Vector2(sx, sy)
 			print(target)
 			target.x = clamp(target.x, 0, base_sx-1)
 			target.y = clamp(target.y, 0, base_sy-1)
 	elif event is InputEventMouseButton:
+		sleep_delay = 2.0
 		if event.button_index == BUTTON_WHEEL_UP:
 			zoom *= 0.9
 		elif event.button_index == BUTTON_WHEEL_DOWN:
@@ -88,7 +92,7 @@ func _draw():
 	#draw_string(font, Vector2(240, 21), "(mouse:%.0f, %.0f, view:%.04f, %.04f, pos:%.1f, %.1f)" % [m.x,m.y, uv.x, uv.y, xx, yy])
 	#draw_string(font, Vector2(240, 37), "(s:%.1f, %.1f, o:%.1f, %.1f, is:%d,%d, io:%d,%d)" % [sx,sy, ox,oy, sx_i,sy_i, ox_i,oy_i])
 	if unicode != error:
-		draw_string(font, Vector2(105, text_y), " -> %04X %d codepoint" % [unicode, unicode])
+		draw_string(font, Vector2(105, text_y), " -> U+%04X (%d)" % [unicode, unicode])
 			
 		var c4 := utf8 & 0xff
 		var c3 := (utf8 >> 8) & 0xff
@@ -103,7 +107,7 @@ func _draw():
 				arr.push_back(ar[ii])
 			s = arr.get_string_from_utf8()
 			if s and s.length():
-				print(s, ", ", arr)
+				print("U+%04X, %07d %s, '%s'" % [unicode, unicode, arr.hex_encode().to_upper(), s])
 				draw_char(font, Vector2(105, text_y + 20), s, " ")
 				break
 	else:
