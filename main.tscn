@@ -1,14 +1,17 @@
-[gd_scene load_steps=5 format=2]
+[gd_scene load_steps=7 format=2]
 
 [ext_resource path="res://fullscreen_shader.gd" type="Script" id=1]
 [ext_resource path="res://fullscreen_shader_material.tres" type="Material" id=2]
 [ext_resource path="res://hotel_corridor.tres" type="Material" id=3]
+[ext_resource path="res://utf8.tres" type="Material" id=4]
+[ext_resource path="res://mouse_hover.gd" type="Script" id=5]
 
 [sub_resource type="GradientTexture" id=1]
 
 [node name="Node2D" type="Node2D"]
 
 [node name="stomp" type="TextureRect" parent="."]
+visible = false
 material = ExtResource( 2 )
 margin_right = 1025.0
 margin_bottom = 600.0
@@ -16,6 +19,18 @@ texture = SubResource( 1 )
 expand = true
 stretch_mode = 1
 script = ExtResource( 1 )
+
+[node name="utf8" type="TextureRect" parent="."]
+material = ExtResource( 4 )
+margin_right = 1024.0
+margin_bottom = 600.0
+texture = SubResource( 1 )
+expand = true
+stretch_mode = 1
+script = ExtResource( 1 )
+
+[node name="mouse_hover" type="Node2D" parent="utf8"]
+script = ExtResource( 5 )
 
 [node name="hotel_corridor" type="TextureRect" parent="."]
 visible = false

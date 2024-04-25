@@ -1,0 +1,106 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=2]
+
+[sub_resource type="Shader" id=1]
+code = "shader_type canvas_item;
+ 
+uniform sampler2D iChannel0;
+uniform sampler2D iChannel1;
+uniform sampler2D iChannel2;
+uniform float width_by_height = 1.0;
+
+/*
+uniform int ox = 0;
+uniform int oy = 0;
+uniform int sx = 65536;
+uniform int sy = 65536;
+*/
+uniform float ox = 0;
+uniform float oy = 0;
+uniform float sx = 65536;
+uniform float sy = 65536;
+uniform int px = 0;
+uniform int py = 0;
+
+bool nc(int v) { // not continuation byte
+	return (v & 0xC0) != 0x80;
+}
+
+const int error = 0x800000;
+
+int utf_8_to_unicode(int utf8)
+{
+	int c4 = utf8 & 0xff;
+	int c3 = (utf8 >> 8) & 0xff;
+	int c2 = (utf8 >> 16) & 0xff;
+	int c1 = (utf8 >> 24) & 0xff;
+	if ((c1 & 0x80) == 0x00) return c1;
+	if (!nc(c1)) return error; // first cant be continuation byte
+	if ((c1 & 0xE0) == 0xC0) {
+		if (nc(c2)) return error;
+		int result = (c1 & 0x1F);
+		result = (result << 6) + (c2 & 0x3F);
+		return result;
+	}
+	if ((c1 & 0xF0) == 0xE0) {
+		if (nc(c2) || nc(c3)) return error;
+		int result = c1 & 0x0F;
+		result = (result << 6) + (c2 & 0x3F);
+		result = (result << 6) + (c3 & 0x3F);
+		return result;
+	}
+	if ((c1 & 0xF8) == 0xF0) {
+		if (nc(c2) || nc(c3) || nc(c4)) return error;
+		int result = (c1 & 0x07);
+		result = (result << 6) + (c2 & 0x3F);
+		result = (result << 6) + (c3 & 0x3F);
+		result = (result << 6) + (c4 & 0x3F);
+		return result;
+	}
+	return error;
+}
+
+void mainImage( out vec4 fragColor, in vec2 uv)
+{
+	int w = 1 << 16;
+	float xx = ox + uv.x * sx - 1.0 - sx * 0.5;
+	float yy = oy + (1.0 - uv.y) * sy - 1.0 - sy * 0.5;
+	int x = int(xx);
+	int y = int(yy);
+	//int x = ox + int(uv.x * float(sx) - 0.5) - sx / 2;
+	//int y = oy + int((1.0 - uv.y) * float(sy) - 0.5) - sy / 2;
+	if (xx < 0.0) x -= 1; // eliminate -0
+	if (yy < 0.0) y -= 1; // eliminate -0
+	if ((x == px || y == py) && !(x == px && y == py) && abs(x - px) < 3 && abs(y - py) < 3) {
+		fragColor = vec4(0.4,0.8,0.7,1);
+		return;
+	}
+	if (x < 0 || y < 0 || x > 0xFFFF || y > 0xFFFF) {
+		if (x == -1 || y == -1 || x == 0x10000 || y == 0x10000)
+			fragColor = vec4(0.2,0.4,0.3,1);
+		else
+			fragColor = vec4(0.1,0.2,0.15,1);
+		return;
+	}
+	int utf8 = x + y * w;
+	int unicode = utf_8_to_unicode(utf8);
+	float b = float((unicode >> 0) & 0xFF) / 255.0;
+	float g = float((unicode >> 8) & 0xFF) / 255.0;
+	float r = float((unicode >> 16) & 0xFF) / 255.0;
+	fragColor = vec4(r,g,b, 1.0);
+}
+
+void fragment()
+{
+	vec2 flipped_uvs = vec2(UV.x * width_by_height, 1.0 - UV.y);
+	mainImage(COLOR, flipped_uvs);
+}"
+
+[resource]
+shader = SubResource( 1 )
+shader_param/width_by_height = 1.0
+shader_param/ox = 0.0
+shader_param/oy = 0.0
+shader_param/sx = 65536.0
+shader_param/sy = 65536.0
+shader_param/px = 0
+shader_param/py = 0
